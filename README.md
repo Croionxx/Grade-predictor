@@ -21,3 +21,10 @@ Deliverables:
 Bonus (Productization):<br>
 Build a web app ( Streamlit is fine ) where users can input student details to
 predict grades.
+
+<br>
+<br>
+<br>
+<br>
+
+Activation of virtual environment: source env/bin/activate
