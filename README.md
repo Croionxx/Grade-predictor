@@ -14,10 +14,10 @@ free to search for and use better datasets.
 <br>
 Deliverables:
 <br>
-1. Train an ANN or Decision Tree model for regression or classification.
-2. Evaluate using RMSE or classification metrics (e.g., accuracy, F1-score).
-3. Analyze feature importance to identify key contributors to performance.
+1. Train an ANN or Decision Tree model for regression or classification.<br>
+2. Evaluate using RMSE or classification metrics (e.g., accuracy, F1-score).<br>
+3. Analyze feature importance to identify key contributors to performance.<br>
 <br>
-Bonus (Productization):
+Bonus (Productization):<br>
 Build a web app ( Streamlit is fine ) where users can input student details to
 predict grades.
