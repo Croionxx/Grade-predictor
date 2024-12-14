@@ -102,7 +102,7 @@ project_directory/
   ├── feature_scaler.pkl        # Saved feature scaler (after running generate_model.py)
   ├── target_scaler.pkl         # Saved target scaler (after running generate_model.py)
   └── student_data/
-      └── student-mat.csv       # Dataset file (not included, must be provided)
+      └── student-mat.csv       # Dataset file 
 ```
 
 ---

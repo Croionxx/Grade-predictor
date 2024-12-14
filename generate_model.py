@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers # type: ignore
+from tensorflow.keras import layers  # type: ignore
 import pandas as pd
 import numpy as np
 import logging
@@ -8,17 +8,19 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
+import joblib
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 # 1. Data Preprocessing
-def preprocess_data(file_path,target):
+def preprocess_data(file_path, target):
     """
     Loads and preprocesses the dataset, including scaling.
 
     Args:
         file_path (str): Path to the dataset file.
+        target (str): Target column name.
 
     Returns:
         X (np.array): Preprocessed features.
@@ -47,9 +49,11 @@ def preprocess_data(file_path,target):
     # Scale target
     target_scaler = StandardScaler()
     y = target_scaler.fit_transform(y.values.reshape(-1, 1)).flatten()
-
+    
+    
     logging.info("Data preprocessing complete.")
     return X, y, feature_scaler, target_scaler
+
 
 # 2. Model Creation with Variable Neuron Configuration
 def create_model(input_shape, neuron_config):
@@ -83,6 +87,7 @@ def create_model(input_shape, neuron_config):
     logging.info("Model created successfully with variable neurons.")
     return model
 
+
 # 3. Train Model
 def train_model(X_train, y_train, X_val, y_val, neuron_config, learning_rate=0.001, batch_size=64, epochs=500):
     """
@@ -104,7 +109,7 @@ def train_model(X_train, y_train, X_val, y_val, neuron_config, learning_rate=0.0
     model.compile(
         optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
         loss='mse',  # Mean Squared Error for regression
-        metrics=[keras.metrics.RootMeanSquaredError(name='rmse')]  # RMSE as a metric
+        metrics=[keras.metrics.RootMeanSquaredError(name='rmse')]  # Explicitly named RMSE metric
     )
 
     # Callbacks
@@ -125,8 +130,11 @@ def train_model(X_train, y_train, X_val, y_val, neuron_config, learning_rate=0.0
         verbose=1
     )
 
+    # Save the trained model
+    model.save('optimized_ann_model.h5')
     logging.info("Model training complete.")
     return model, history
+
 
 # 4. Visualize Training History
 def plot_training_history(history):
@@ -146,6 +154,7 @@ def plot_training_history(history):
     plt.legend()
     plt.title('Training History')
     plt.show()
+
 
 # 5. Evaluate Model
 def evaluate_model(model, X_test, y_test, target_scaler):
@@ -172,13 +181,23 @@ def evaluate_model(model, X_test, y_test, target_scaler):
     print(f"Test MAE: {mae:.4f}")
     print(f"Test R2: {r2:.4f}")
 
+
 # Main Execution
 if __name__ == "__main__":
     file_path = 'student_data/student-mat.csv'
     target = 'G3'
-    X, y, feature_scaler, target_scaler = preprocess_data(file_path,target)
+    X, y, feature_scaler, target_scaler = preprocess_data(file_path, target)
     if X is None or y is None:
         exit()
+
+    # Save the feature names after preprocessing
+    training_columns = pd.DataFrame(X).columns.tolist()  # List of feature names after preprocessing
+    joblib.dump(training_columns, 'training_columns.pkl')
+    logging.info("Feature names saved successfully.")
+
+    # Save scalers for later use
+    joblib.dump(feature_scaler, 'feature_scaler.pkl')
+    joblib.dump(target_scaler, 'target_scaler.pkl')
 
     # Train-test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
