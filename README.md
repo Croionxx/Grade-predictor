@@ -125,7 +125,7 @@ pip install numpy pandas scikit-learn matplotlib tensorflow joblib
 - **Restoring model weights from the end of the best epoch**: 1181.
 
 ### Training History Plot:
-![Training History](training_history_plot.png.)
+![Training History]([training_history_plot.png.](https://github.com/Croionxx/Grade-predictor/blob/f64022c02f2e1e55aa5ecfc52def98775ac9bffd/training_history_plot.png))
 
 ---
 
