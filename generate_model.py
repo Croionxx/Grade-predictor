@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers
+from tensorflow.keras import layers # type: ignore
 import pandas as pd
 import numpy as np
 import logging
@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 # 1. Data Preprocessing
-def preprocess_data(file_path):
+def preprocess_data(file_path,target):
     """
     Loads and preprocesses the dataset, including scaling.
 
@@ -34,8 +34,8 @@ def preprocess_data(file_path):
         return None, None, None, None
 
     # Split predictors and target
-    X = data.drop(columns=['G3'])  # Features
-    y = data['G3']  # Target variable
+    X = data.drop(columns=[target])  # Features
+    y = data[target]  # Target variable
 
     # One-hot encode categorical features
     X = pd.get_dummies(X, drop_first=True)
@@ -84,7 +84,7 @@ def create_model(input_shape, neuron_config):
     return model
 
 # 3. Train Model
-def train_model(X_train, y_train, X_val, y_val, neuron_config, learning_rate=0.001, batch_size=64, epochs=200):
+def train_model(X_train, y_train, X_val, y_val, neuron_config, learning_rate=0.001, batch_size=64, epochs=500):
     """
     Trains the model with the given data.
 
@@ -175,7 +175,8 @@ def evaluate_model(model, X_test, y_test, target_scaler):
 # Main Execution
 if __name__ == "__main__":
     file_path = 'student_data/student-mat.csv'
-    X, y, feature_scaler, target_scaler = preprocess_data(file_path)
+    target = 'G3'
+    X, y, feature_scaler, target_scaler = preprocess_data(file_path,target)
     if X is None or y is None:
         exit()
 
@@ -184,10 +185,10 @@ if __name__ == "__main__":
     X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
 
     # Define the neuron configuration for the hidden layers
-    neuron_config = [256, 512, 256, 128, 64]  # Example: 3 hidden layers with 256, 128, and 64 neurons
+    neuron_config = [256, 512, 256, 128, 64]
 
     # Train the model
-    model, history = train_model(X_train, y_train, X_val, y_val, neuron_config, epochs=1000)
+    model, history = train_model(X_train, y_train, X_val, y_val, neuron_config, epochs=2000)
 
     # Plot training history
     plot_training_history(history)
