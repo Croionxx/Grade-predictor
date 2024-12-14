@@ -9,7 +9,7 @@ This project involves two key Python scripts designed to predict student final g
 
 ---
 
-## **1. Model Training and Generation (`generate_model.py`)
+## **1. Model Training and Generation (`generate_model.py`)**
 
 This script builds, trains, and saves an ANN model to predict the final student grade (G3). It processes raw data, scales features, and saves both the trained model and the scalers for later use.
 
@@ -54,7 +54,7 @@ If the dataset is in `student_data/student-mat.csv`, the script will train an AN
 
 ---
 
-## **2. Model Loading and Prediction (`load_model_predict.py`)
+## **2. Model Loading and Prediction (`load_model_predict.py`)**
 
 This script loads the saved ANN model, takes custom input values for features, and predicts the final grade (G3).
 
@@ -125,7 +125,7 @@ pip install numpy pandas scikit-learn matplotlib tensorflow joblib
 - **Restoring model weights from the end of the best epoch**: 1181.
 
 ### Training History Plot:
-![Training History]([training_history_plot.png.](https://github.com/Croionxx/Grade-predictor/blob/f64022c02f2e1e55aa5ecfc52def98775ac9bffd/training_history_plot.png))
+<img src="training_history_plot.png" alt="Dataset training results" width="600"/>
 
 ---
 
