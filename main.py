@@ -3,91 +3,194 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import pandas as pd
 import numpy as np
+import logging
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder, StandardScaler
+from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+import matplotlib.pyplot as plt
 
-# Load and preprocess the data
-file_path = 'student_data/student-mat.csv'  # Update this to the correct path
-data = pd.read_csv(file_path, delimiter=';')
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
-# Include G1 and G2 back as predictors
-X = data.drop(columns=['G3'])
-y = data['G3']
+# 1. Data Preprocessing
+def preprocess_data(file_path):
+    """
+    Loads and preprocesses the dataset, including scaling.
 
-# Encode categorical features and normalize numerical features
-X = pd.get_dummies(X, drop_first=True)  # One-hot encode categorical features
-scaler = StandardScaler()
-X = scaler.fit_transform(X)  # Normalize the features
+    Args:
+        file_path (str): Path to the dataset file.
 
-# Split the data into train and test sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    Returns:
+        X (np.array): Preprocessed features.
+        y (np.array): Scaled target variable.
+        feature_scaler (StandardScaler): Scaler object for features.
+        target_scaler (StandardScaler): Scaler object for target variable.
+    """
+    try:
+        data = pd.read_csv(file_path, delimiter=';')
+        logging.info("Data successfully loaded.")
+    except FileNotFoundError:
+        logging.error(f"Error: File not found at {file_path}. Please check the path.")
+        return None, None, None, None
 
-# Define an optimized ANN model
-def create_optimized_model():
-    model = keras.Sequential([
-        layers.Input(shape=(X_train.shape[1],)),  # Input layer with input size as number of features
-        
-        layers.Dense(512, activation='relu', kernel_initializer='he_normal', kernel_regularizer=keras.regularizers.l1_l2(l1=1e-6, l2=1e-4)),
-        layers.BatchNormalization(),  # Normalize activations
-        layers.Dropout(0.1),  # Reduced Dropout to prevent underfitting
-        
-        layers.Dense(256, activation='relu', kernel_initializer='he_normal', kernel_regularizer=keras.regularizers.l1_l2(l1=1e-6, l2=1e-4)),
-        layers.BatchNormalization(),  # Normalize activations
-        layers.Dropout(0.1),  # Reduced Dropout to prevent underfitting
-        
-        layers.Dense(128, activation='relu', kernel_initializer='he_normal', kernel_regularizer=keras.regularizers.l1_l2(l1=1e-6, l2=1e-4)),
-        layers.BatchNormalization(),  # Normalize activations
-        layers.Dropout(0.1),  # Reduced Dropout to prevent underfitting
-        
-        layers.Dense(64, activation='relu', kernel_initializer='he_normal', kernel_regularizer=keras.regularizers.l1_l2(l1=1e-6, l2=1e-4)),
-        layers.BatchNormalization(),  # Normalize activations
-        layers.Dropout(0.1),  # Reduced Dropout to prevent underfitting
-        
-        layers.Dense(32, activation='relu', kernel_initializer='he_normal', kernel_regularizer=keras.regularizers.l1_l2(l1=1e-6, l2=1e-4)),
-        layers.BatchNormalization(),  # Normalize activations
-        
-        layers.Dense(1)  # Output layer with 1 unit for regression output
-    ])
+    # Split predictors and target
+    X = data.drop(columns=['G3'])  # Features
+    y = data['G3']  # Target variable
+
+    # One-hot encode categorical features
+    X = pd.get_dummies(X, drop_first=True)
+
+    # Scale features
+    feature_scaler = StandardScaler()
+    X = feature_scaler.fit_transform(X)
+
+    # Scale target
+    target_scaler = StandardScaler()
+    y = target_scaler.fit_transform(y.values.reshape(-1, 1)).flatten()
+
+    logging.info("Data preprocessing complete.")
+    return X, y, feature_scaler, target_scaler
+
+# 2. Model Creation with Variable Neuron Configuration
+def create_model(input_shape, neuron_config):
+    """
+    Creates and returns an ANN model with a variable number of neurons in each layer.
+
+    Args:
+        input_shape (int): The number of input features.
+        neuron_config (list of int): Number of neurons for each hidden layer.
+
+    Returns:
+        model (keras.Sequential): Compiled Keras Sequential model.
+    """
+    model = keras.Sequential()
+    model.add(layers.Input(shape=(input_shape,)))
+
+    # Add hidden layers dynamically based on neuron_config
+    for i, neurons in enumerate(neuron_config):
+        model.add(layers.Dense(
+            neurons,
+            activation='relu',
+            kernel_initializer='he_normal',
+            kernel_regularizer=keras.regularizers.l2(1e-4)
+        ))
+        model.add(layers.BatchNormalization())
+        model.add(layers.Dropout(0.2))  # Dropout for regularization
+
+    # Output layer
+    model.add(layers.Dense(1))  # Regression output (1 neuron)
+
+    logging.info("Model created successfully with variable neurons.")
     return model
 
-# Compile the model
-model = create_optimized_model()
-model.compile(optimizer=keras.optimizers.Adam(learning_rate=0.001), 
-              loss='mae',  # Use MAE as the main loss
-              metrics=[keras.metrics.RootMeanSquaredError(name='rmse'), 'mae'])
+# 3. Train Model
+def train_model(X_train, y_train, X_val, y_val, neuron_config, learning_rate=0.001, batch_size=64, epochs=200):
+    """
+    Trains the model with the given data.
 
-# Add callbacks for learning rate scheduling and early stopping
-early_stopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=30, restore_best_weights=True, verbose=1)
-reduce_lr = keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.5, patience=10, min_lr=1e-6, verbose=1)
+    Args:
+        X_train, y_train: Training data.
+        X_val, y_val: Validation data.
+        neuron_config (list of int): Number of neurons for each hidden layer.
+        learning_rate (float): Learning rate for the optimizer.
+        batch_size (int): Batch size for training.
+        epochs (int): Number of epochs to train.
 
-# Train the model
-history = model.fit(X_train, y_train, 
-                    epochs=500,  # More epochs to ensure better convergence
-                    batch_size=64,  # Larger batch size for more stable updates
-                    validation_split=0.2, 
-                    callbacks=[early_stopping, reduce_lr], 
-                    verbose=1)
+    Returns:
+        model: Trained Keras model.
+        history: Training history.
+    """
+    model = create_model(X_train.shape[1], neuron_config)
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
+        loss='mse',  # Mean Squared Error for regression
+        metrics=[keras.metrics.RootMeanSquaredError(name='rmse')]  # RMSE as a metric
+    )
 
-# Evaluate the model on the test set
-y_pred = model.predict(X_test, verbose=0).flatten()
+    # Callbacks
+    early_stopping = keras.callbacks.EarlyStopping(
+        monitor='val_loss', patience=100, restore_best_weights=True, verbose=1
+    )
+    reduce_lr = keras.callbacks.ReduceLROnPlateau(
+        monitor='val_loss', factor=0.5, patience=50, min_lr=1e-6, verbose=1
+    )
 
-# Calculate performance metrics
-test_rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-test_mae = mean_absolute_error(y_test, y_pred)
-test_r2 = r2_score(y_test, y_pred)
+    # Train the model
+    history = model.fit(
+        X_train, y_train,
+        validation_data=(X_val, y_val),
+        epochs=epochs,
+        batch_size=batch_size,
+        callbacks=[early_stopping, reduce_lr],
+        verbose=1
+    )
 
-print(f"Test RMSE: {test_rmse:.4f}")
-print(f"Test MAE: {test_mae:.4f}")
-print(f"Test R2: {test_r2:.4f}")
+    logging.info("Model training complete.")
+    return model, history
 
-# Function to make predictions for a new input
-def predict_new_input(model, input_features):
-    input_tensor = np.array(input_features).reshape(1, -1)  # Reshape input to have batch dimension
-    prediction = model.predict(input_tensor, verbose=0)
-    return prediction[0][0]
+# 4. Visualize Training History
+def plot_training_history(history):
+    """
+    Plots the training and validation loss and RMSE over epochs.
 
-# Example usage
-example_input = X[0]  # Use the first sample from the dataset as input
-predicted_G3 = predict_new_input(model, example_input)
-print(f"Predicted G3 for input: {predicted_G3}")
+    Args:
+        history: Training history object.
+    """
+    plt.figure(figsize=(10, 6))
+    plt.plot(history.history['loss'], label='Training Loss')
+    plt.plot(history.history['val_loss'], label='Validation Loss')
+    plt.plot(history.history['rmse'], label='Training RMSE')
+    plt.plot(history.history['val_rmse'], label='Validation RMSE')
+    plt.xlabel('Epochs')
+    plt.ylabel('Metrics')
+    plt.legend()
+    plt.title('Training History')
+    plt.show()
+
+# 5. Evaluate Model
+def evaluate_model(model, X_test, y_test, target_scaler):
+    """
+    Evaluates the model on test data and calculates performance metrics.
+
+    Args:
+        model: Trained model.
+        X_test, y_test: Test data.
+        target_scaler: Scaler object for target variable.
+
+    Returns:
+        None
+    """
+    y_pred_scaled = model.predict(X_test).flatten()
+    y_pred = target_scaler.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
+    y_test_original = target_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
+
+    rmse = np.sqrt(mean_squared_error(y_test_original, y_pred))
+    mae = mean_absolute_error(y_test_original, y_pred)
+    r2 = r2_score(y_test_original, y_pred)
+
+    print(f"Test RMSE: {rmse:.4f}")
+    print(f"Test MAE: {mae:.4f}")
+    print(f"Test R2: {r2:.4f}")
+
+# Main Execution
+if __name__ == "__main__":
+    file_path = 'student_data/student-mat.csv'
+    X, y, feature_scaler, target_scaler = preprocess_data(file_path)
+    if X is None or y is None:
+        exit()
+
+    # Train-test split
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
+
+    # Define the neuron configuration for the hidden layers
+    neuron_config = [256, 512, 256, 128, 64]  # Example: 3 hidden layers with 256, 128, and 64 neurons
+
+    # Train the model
+    model, history = train_model(X_train, y_train, X_val, y_val, neuron_config, epochs=1000)
+
+    # Plot training history
+    plot_training_history(history)
+
+    # Evaluate the model
+    evaluate_model(model, X_test, y_test, target_scaler)
