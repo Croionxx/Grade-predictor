@@ -1,112 +1,98 @@
-import numpy as np
-import joblib
-from tensorflow.keras.models import load_model # type: ignore
-from tensorflow.keras.metrics import MeanSquaredError # type: ignore
 import pandas as pd
+import joblib
+from tensorflow.keras.models import load_model  # type: ignore
+from tensorflow.keras.metrics import MeanSquaredError  # type: ignore
 
-def load_model_and_scalers(model_path, feature_scaler_path, target_scaler_path):
-    try:
-        custom_objects = {"mse": MeanSquaredError()}
-        model = load_model(model_path, custom_objects=custom_objects)
-        feature_scaler = joblib.load(feature_scaler_path)
-        target_scaler = joblib.load(target_scaler_path)
-        print("Model and scalers loaded successfully.")
-        return model, feature_scaler, target_scaler
-    except Exception as e:
-        print(f"Error loading model or scalers: {e}")
-        return None, None, None
-
-
-def preprocess_user_input(user_input, training_columns):
+def load_and_predict(input_data):
     """
-    Preprocesses user input to match the training feature set.
+    Loads the pre-trained model and scalers, processes the input data, and returns the predicted G3 value.
 
     Args:
-        user_input (dict): Raw user input as a dictionary.
-        training_columns (list): List of feature names used during training.
-
-    Returns:
-        np.array: Preprocessed and scaled input array.
-    """
-    user_input_df = pd.DataFrame([user_input])
-    user_input_encoded = pd.get_dummies(user_input_df)
-    user_input_aligned = user_input_encoded.reindex(columns=training_columns, fill_value=0)
-    return user_input_aligned
-
-
-def predict_g3(model, feature_scaler, target_scaler, user_input, training_columns):
-    """
-    Predicts the G3 value based on user input.
-
-    Args:
-        model: Trained Keras model.
-        feature_scaler: Scaler used to transform input features.
-        target_scaler: Scaler used to inverse transform the output.
-        user_input: Raw user input as a dictionary.
-        training_columns: List of feature names used during training.
+        input_data (dict): Input feature dictionary for prediction.
 
     Returns:
         float: Predicted G3 value.
     """
     try:
-        # Preprocess the input to match training features
-        preprocessed_input = preprocess_user_input(user_input, training_columns)
+        # Provide custom objects if necessary
+        model = load_model('optimized_ann_model.h5', custom_objects={'mse': MeanSquaredError()})
+        print("[INFO] Model loaded successfully.")
 
-        # Scale the input using the feature scaler
-        scaled_input = feature_scaler.transform(preprocessed_input)
-
-        # Predict the scaled output using the model
-        scaled_prediction = model.predict(scaled_input)
-
-        # Inverse transform the prediction to get the original G3 value
-        predicted_g3 = target_scaler.inverse_transform(scaled_prediction).flatten()[0]
-        print(f"\nPredicted G3 value: {predicted_g3:.2f}")
-        return predicted_g3
+        # Load the scalers and feature names
+        feature_scaler = joblib.load('feature_scaler.pkl')
+        target_scaler = joblib.load('target_scaler.pkl')
+        training_columns = joblib.load('training_columns.pkl')
+        print("[INFO] Scalers and feature names loaded successfully.")
+        print("[DEBUG] Training columns loaded:", training_columns)
     except Exception as e:
-        print(f"Error during prediction: {e}")
+        print(f"[ERROR] Error loading model or scalers: {e}")
         return None
 
+    try:
+        # Convert input_data to DataFrame and align it with training columns
+        input_df = pd.DataFrame([input_data])
+        print("[DEBUG] User input DataFrame before reindexing:\n", input_df)
+        input_df = input_df.reindex(columns=training_columns, fill_value=0)
+        print("[DEBUG] User input DataFrame after reindexing:\n", input_df)
 
-def main():
-    model_path = 'optimized_ann_model.h5'
-    feature_scaler_path = 'feature_scaler.pkl'
-    target_scaler_path = 'target_scaler.pkl'
-    training_columns_path = 'training_columns.pkl'
+        if input_df.isnull().values.any():
+            print("[WARNING] Input DataFrame contains NaN values after reindexing.")
+        if (input_df == 0).all().all():
+            print("[WARNING] Input DataFrame is all zeros after reindexing.")
 
-    # Load the training feature names
-    training_columns = joblib.load(training_columns_path)
+        input_scaled = feature_scaler.transform(input_df)
+        print("[DEBUG] Scaled input data:\n", input_scaled)
 
-    # Load the trained model and scalers
-    model, feature_scaler, target_scaler = load_model_and_scalers(
-        model_path, feature_scaler_path, target_scaler_path
-    )
-    if model is None or feature_scaler is None or target_scaler is None:
-        print("Failed to load the required components. Exiting.")
-        return
+        # Predict using the loaded model
+        prediction_scaled = model.predict(input_scaled).flatten()
+        print("[DEBUG] Scaled prediction:\n", prediction_scaled)
 
-    # Example user input
-    user_input = {
-        'age': 18,
-        'Medu': 4,
-        'Fedu': 4,
-        'traveltime': 1,
-        'studytime': 2,
-        'failures': 0,
-        'famrel': 4,
-        'freetime': 3,
-        'goout': 2,
-        'Dalc': 1,
-        'Walc': 1,
-        'health': 5,
-        'absences': 6,
-        'school_MS': 0,  # Example of one-hot encoded categorical features
-        'sex_M': 1,
-        # Add all other required one-hot encoded categorical features...
-    }
+        if (prediction_scaled == prediction_scaled[0]).all():
+            print("[WARNING] All elements in prediction_scaled are identical, indicating potential model issue.")
 
-    # Predict the G3 value
-    predict_g3(model, feature_scaler, target_scaler, user_input, training_columns)
+        # Inverse transform the prediction to get the original scale
+        prediction = target_scaler.inverse_transform(prediction_scaled.reshape(-1, 1)).flatten()[0]
+        print("[INFO] Final prediction (in original scale):", prediction)
+        return prediction
 
+    except Exception as e:
+        print(f"[ERROR] Error during prediction: {e}")
+        return None
 
 if __name__ == "__main__":
-    main()
+    # Example input: Replace with actual feature values in dictionary form
+    example_input = {
+        'age': 21,
+        'Medu': 2,
+        'Fedu': 0,
+        'traveltime': 1,
+        'studytime': 0,
+        'failures': 0,
+        'famrel': 5,
+        'freetime': 4,
+        'goout': 3,
+        'Dalc': 1,
+        'Walc': 1,
+        'health': 4,
+        'absences': 3,
+        'school_MS': 1,
+        'sex_M': 1,
+        'address_U': 1,
+        'famsize_LE3': 0,
+        'Pstatus_T': 0,
+        'Mjob_health': 0,
+        'Mjob_other': 1,
+        'Mjob_services': 1,
+        'Mjob_teacher': 3,
+        'Fjob_health': 4,
+        'Fjob_other': 1,
+        'Fjob_services': 0,
+        'Fjob_teacher': 1,
+        'reason_home': 0
+    }
+    predicted_g3 = load_and_predict(example_input)
+
+    if predicted_g3 is not None:
+        print(f"Predicted G3 value: {predicted_g3:.2f}")
+    else:
+        print("Prediction failed.")
