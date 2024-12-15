@@ -1,6 +1,6 @@
 import tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers  # type: ignore
+from tensorflow.keras import layers # type: ignore
 import pandas as pd
 import numpy as np
 import logging
@@ -9,166 +9,108 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 import matplotlib.pyplot as plt
 import joblib
+import keras_tuner as kt  # Import Keras Tuner for hyperparameter tuning
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
 
 # 1. Data Preprocessing
 def preprocess_data(file_path, target):
-    """
-    Loads and preprocesses the dataset, including scaling.
-
-    Args:
-        file_path (str): Path to the dataset file.
-        target (str): Target column name.
-
-    Returns:
-        X (np.array): Preprocessed features.
-        y (np.array): Scaled target variable.
-        feature_scaler (StandardScaler): Scaler object for features.
-        target_scaler (StandardScaler): Scaler object for target variable.
-    """
-    try:
-        data = pd.read_csv(file_path, delimiter=';')
-        logging.info("Data successfully loaded.")
-    except FileNotFoundError:
-        logging.error(f"Error: File not found at {file_path}. Please check the path.")
-        return None, None, None, None
+    data = pd.read_csv(file_path, delimiter=';')
+    logging.info("Data successfully loaded.")
 
     # Split predictors and target
-    X = data.drop(columns=[target])  # Features
-    y = data[target]  # Target variable
+    X = data.drop(columns=[target])
+    y = data[target]
 
     # One-hot encode categorical features
     X = pd.get_dummies(X, drop_first=True)
-
-    # Scale features
+    
+    # Save the correct training column names before transforming X
+    training_columns = X.columns.tolist()
+    joblib.dump(training_columns, 'training_columns.pkl')
+    logging.info(f"Training columns saved successfully: {training_columns}")
+    
+    # Scale features and target
     feature_scaler = StandardScaler()
     X = feature_scaler.fit_transform(X)
 
-    # Scale target
     target_scaler = StandardScaler()
     y = target_scaler.fit_transform(y.values.reshape(-1, 1)).flatten()
-    
-    
+
     logging.info("Data preprocessing complete.")
     return X, y, feature_scaler, target_scaler
 
 
-# 2. Model Creation with Variable Neuron Configuration
-def create_model(input_shape, neuron_config):
+# 2. Model Builder for Hyperparameter Tuning
+def create_model(hp):
     """
-    Creates and returns an ANN model with a variable number of neurons in each layer.
+    Creates and returns an ANN model with hyperparameters for tuning.
 
     Args:
-        input_shape (int): The number of input features.
-        neuron_config (list of int): Number of neurons for each hidden layer.
+        hp (HyperParameters): Hyperparameters from Keras Tuner.
 
     Returns:
-        model (keras.Sequential): Compiled Keras Sequential model.
+        model: Compiled Keras model.
     """
     model = keras.Sequential()
-    model.add(layers.Input(shape=(input_shape,)))
+    model.add(layers.Input(shape=(X_train.shape[1],)))
 
-    # Add hidden layers dynamically based on neuron_config
-    for i, neurons in enumerate(neuron_config):
-        model.add(layers.Dense(
-            neurons,
-            activation='relu',
-            kernel_initializer='he_normal',
-            kernel_regularizer=keras.regularizers.l2(1e-4)
-        ))
+    # Dynamically add layers and neurons
+    for i in range(hp.Int("num_layers", 1, 5)):  # Tune number of layers (1 to 5)
+        model.add(
+            layers.Dense(
+                units=hp.Int(f"units_{i}", min_value=32, max_value=512, step=32),
+                activation='relu',
+                kernel_initializer='he_normal',
+                kernel_regularizer=keras.regularizers.l2(hp.Float("l2", 1e-5, 1e-2, sampling="log")),
+            )
+        )
         model.add(layers.BatchNormalization())
-        model.add(layers.Dropout(0.2))  # Dropout for regularization
+        model.add(layers.Dropout(hp.Float("dropout", 0.2, 0.5, step=0.1)))
 
     # Output layer
-    model.add(layers.Dense(1))  # Regression output (1 neuron)
+    model.add(layers.Dense(1))
 
-    logging.info("Model created successfully with variable neurons.")
+    # Compile model
+    model.compile(
+        optimizer=keras.optimizers.Adam(learning_rate=hp.Float("learning_rate", 1e-5, 1e-2, sampling="log")),
+        loss='mse',  # Loss for regression
+        metrics=['mae']  # Replace rmse with mae or mse
+    )
     return model
 
 
-# 3. Train Model
-def train_model(X_train, y_train, X_val, y_val, neuron_config, learning_rate=0.001, batch_size=64, epochs=500):
-    """
-    Trains the model with the given data.
+# 3. Train and Tune the Model
+def tune_model(X_train, y_train, X_val, y_val):
+    from keras_tuner import Hyperband
 
-    Args:
-        X_train, y_train: Training data.
-        X_val, y_val: Validation data.
-        neuron_config (list of int): Number of neurons for each hidden layer.
-        learning_rate (float): Learning rate for the optimizer.
-        batch_size (int): Batch size for training.
-        epochs (int): Number of epochs to train.
-
-    Returns:
-        model: Trained Keras model.
-        history: Training history.
-    """
-    model = create_model(X_train.shape[1], neuron_config)
-    model.compile(
-        optimizer=keras.optimizers.Adam(learning_rate=learning_rate),
-        loss='mse',  # Mean Squared Error for regression
-        metrics=[keras.metrics.RootMeanSquaredError(name='rmse')]  # Explicitly named RMSE metric
+    tuner = Hyperband(
+        create_model,
+        objective="val_loss",  # Minimize validation loss
+        max_epochs=50,
+        factor=3,
+        directory="tuning_results",
+        project_name="student_performance",
+        overwrite=True,
     )
 
-    # Callbacks
-    early_stopping = keras.callbacks.EarlyStopping(
-        monitor='val_loss', patience=100, restore_best_weights=True, verbose=1
-    )
-    reduce_lr = keras.callbacks.ReduceLROnPlateau(
-        monitor='val_loss', factor=0.5, patience=50, min_lr=1e-6, verbose=1
-    )
-
-    # Train the model
-    history = model.fit(
-        X_train, y_train,
+    tuner.search(
+        X_train,
+        y_train,
         validation_data=(X_val, y_val),
-        epochs=epochs,
-        batch_size=batch_size,
-        callbacks=[early_stopping, reduce_lr],
-        verbose=1
+        callbacks=[
+            keras.callbacks.EarlyStopping(monitor="val_loss", patience=5)
+        ],
+        verbose=1,
     )
 
-    # Save the trained model
-    model.save('optimized_ann_model.h5')
-    logging.info("Model training complete.")
-    return model, history
+    return tuner
 
 
-# 4. Visualize Training History
-def plot_training_history(history):
-    """
-    Plots the training and validation loss and RMSE over epochs.
 
-    Args:
-        history: Training history object.
-    """
-    plt.figure(figsize=(10, 6))
-    plt.plot(history.history['loss'], label='Training Loss')
-    plt.plot(history.history['val_loss'], label='Validation Loss')
-    plt.plot(history.history['rmse'], label='Training RMSE')
-    plt.plot(history.history['val_rmse'], label='Validation RMSE')
-    plt.xlabel('Epochs')
-    plt.ylabel('Metrics')
-    plt.legend()
-    plt.title('Training History')
-    plt.show()
-
-
-# 5. Evaluate Model
+# 4. Evaluate Model
 def evaluate_model(model, X_test, y_test, target_scaler):
-    """
-    Evaluates the model on test data and calculates performance metrics.
-
-    Args:
-        model: Trained model.
-        X_test, y_test: Test data.
-        target_scaler: Scaler object for target variable.
-
-    Returns:
-        None
-    """
     y_pred_scaled = model.predict(X_test).flatten()
     y_pred = target_scaler.inverse_transform(y_pred_scaled.reshape(-1, 1)).flatten()
     y_test_original = target_scaler.inverse_transform(y_test.reshape(-1, 1)).flatten()
@@ -184,33 +126,39 @@ def evaluate_model(model, X_test, y_test, target_scaler):
 
 # Main Execution
 if __name__ == "__main__":
-    file_path = 'student_data/student-mat.csv'
-    target = 'G3'
+    file_path = "student_data/student-mat.csv"
+    target = "G3"
     X, y, feature_scaler, target_scaler = preprocess_data(file_path, target)
-    if X is None or y is None:
-        exit()
 
-    # Save the feature names after preprocessing
-    training_columns = pd.DataFrame(X).columns.tolist()  # List of feature names after preprocessing
-    joblib.dump(training_columns, 'training_columns.pkl')
-    logging.info("Feature names saved successfully.")
-
-    # Save scalers for later use
-    joblib.dump(feature_scaler, 'feature_scaler.pkl')
-    joblib.dump(target_scaler, 'target_scaler.pkl')
+    # Save scalers and feature names
+    joblib.dump(feature_scaler, "feature_scaler.pkl")
+    joblib.dump(target_scaler, "target_scaler.pkl")
 
     # Train-test split
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size=0.2, random_state=42)
 
-    # Define the neuron configuration for the hidden layers
-    neuron_config = [256, 512, 256, 128, 64]
+    # Perform hyperparameter tuning
+    input_shape = X_train.shape[1]
+    tuner = tune_model(X_train, y_train, X_val, y_val)
 
-    # Train the model
-    model, history = train_model(X_train, y_train, X_val, y_val, neuron_config, epochs=2000)
+    # Get the best hyperparameters and train the final model
+    best_hps = tuner.get_best_hyperparameters(num_trials=1)[0]
+    logging.info(f"Best hyperparameters: {best_hps.values}")
 
-    # Plot training history
-    plot_training_history(history)
+    # Train the model with the best hyperparameters
+    model = tuner.hypermodel.build(best_hps)
+    history = model.fit(
+        X_train, y_train, validation_data=(X_val, y_val),
+        epochs=500, batch_size=64, verbose=1,
+        callbacks=[
+            keras.callbacks.EarlyStopping(monitor="val_loss", patience=50, restore_best_weights=True),
+            keras.callbacks.ReduceLROnPlateau(monitor="val_loss", factor=0.5, patience=20, min_lr=1e-6)
+        ]
+    )
 
-    # Evaluate the model
+    # Save the final model
+    model.save("optimized_ann_model.h5")
+
+    # Evaluate the final model
     evaluate_model(model, X_test, y_test, target_scaler)
