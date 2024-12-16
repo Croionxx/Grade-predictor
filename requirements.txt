@@ -1,0 +1,8 @@
+streamlit
+tensorflow
+numpy
+pillow
+joblib
+pandas
+tensorflow
+sklearn
