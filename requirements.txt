@@ -5,4 +5,4 @@ pillow
 joblib
 pandas
 tensorflow
-sklearn
+scikit-learn
