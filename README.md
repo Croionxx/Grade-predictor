@@ -84,6 +84,9 @@ This script loads the saved ANN model, processes input feature data, and predict
    - Added detailed debug logs for scaled inputs and predictions.
 
 ### **Usage**
+
+To use the model as is visit https://grade-predictor-5ztnvbxweavguai9xrnwsu.streamlit.app/ .
+
 1. Ensure the `optimized_ann_model.h5`, `feature_scaler.pkl`, `target_scaler.pkl`, and `training_columns.pkl` files are present.
 2. Modify the `example_input` dictionary in the script to test with custom feature values.
 3. Run the script:
