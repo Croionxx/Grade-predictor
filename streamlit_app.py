@@ -18,12 +18,12 @@ st.header("Enter Student Information")
 
 # Numeric Inputs
 age = st.slider("Age", 15, 22, 18, help="Student's age, ranging from 15 to 22")
-G1 = st.slider("First Period Grade (G1)", 0, 20, 10, step=1, key="G1_slider")
-G2 = st.slider("Second Period Grade (G2)", 0, 20, 10, step=1, key="G2_slider")
+G1 = st.slider("Previously attained grade (G1)", 0, 20, 10, step=1, key="G1_slider")
+G2 = st.slider("Previously attained grade (G2)", 0, 20, 10, step=1, key="G2_slider")
 
 # Travel Time (SelectBox)
 traveltime = st.selectbox("Travel Time to School", options=[1, 2, 3, 4],
-                          format_func=lambda x: {1: "<15 min", 2: "15-30 min", 3: "30 min to 1 hour", 4: ">1 hour"}[x], key="traveltime_select")
+                          format_func=lambda x: {1: ">15 min", 2: "15-30 min", 3: "30 min to 1 hour", 4: ">1 hour"}[x], key="traveltime_select")
 
 # Study Time (SelectBox)
 studytime = st.selectbox("Weekly Study Time", options=[1, 2, 3, 4],
